@@ -1,0 +1,165 @@
+# ============================================================
+# Docker Compose - Main Application Stack
+# Bài 1:  Nginx                    (port 8080)
+# Bài 2:  MySQL 8.0                (port 3306)
+# Bài 3:  PHPMyAdmin               (port 8081)
+# Bài 4:  Node.js Express          (port 3000)
+# Bài 5:  Redis                    (port 6379)
+# Bài 6:  WordPress                (port 8085)
+# Bài 7:  MongoDB + Mongo Express  (port 27017, 8082)
+# Bài 8:  Node.js kết nối MySQL    (cùng node-app, endpoint /db)
+# Bài 9:  Flask                    (port 5000)
+# Bài 10: MySQL Volume             (volume mysql_data)
+# Bài 11: PostgreSQL + Adminer     (port 5432, 8083)
+# Bài 13: React + Nginx            (port 8086)
+# Bài 14: Mạng riêng               (network: private-network)
+# Bài 15: Giới hạn tài nguyên      (redis deploy resources)
+# ============================================================
+
+services:
+
+  # --- Bài 1: Nginx đơn giản (port 8080 -> 80) ---
+  nginx:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    networks:
+      - private-network
+
+  # --- Bài 2, 3, 8, 10: MySQL 8.0 ---
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:                          # Bài 10: Volume lưu trữ dữ liệu
+      - mysql_data:/var/lib/mysql
+    networks:
+      - private-network
+
+  # --- Bài 3: PHPMyAdmin (port 8081) ---
+  phpmyadmin:
+    image: phpmyadmin:latest
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+    ports:
+      - "8081:80"
+    depends_on:
+      - mysql
+    networks:
+      - private-network
+
+  # --- Bài 4 & 8: Node.js Express (kết nối MySQL qua /db) ---
+  node-app:
+    build: ./node-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mysql
+    networks:
+      - private-network
+
+  # --- Bài 5 & 15: Redis (giới hạn tài nguyên) ---
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    deploy:                           # Bài 15: Giới hạn CPU & RAM
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    networks:
+      - private-network
+
+  # --- Bài 6: WordPress ---
+  wordpress:
+    image: wordpress:latest
+    environment:
+      WORDPRESS_DB_HOST: mysql:3306
+      WORDPRESS_DB_USER: user
+      WORDPRESS_DB_PASSWORD: password
+      WORDPRESS_DB_NAME: mydb
+    ports:
+      - "8085:80"
+    depends_on:
+      - mysql
+    networks:
+      - private-network
+
+  # --- Bài 7: MongoDB ---
+  mongodb:
+    image: mongo:latest
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    networks:
+      - private-network
+
+  # --- Bài 7: Mongo Express ---
+  mongo-express:
+    image: mongo-express:latest
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://root:password@mongodb:27017/
+    ports:
+      - "8082:8081"
+    depends_on:
+      - mongodb
+    networks:
+      - private-network
+
+  # --- Bài 9: Flask ---
+  flask-app:
+    build: ./flask-app
+    ports:
+      - "5000:5000"
+    networks:
+      - private-network
+
+  # --- Bài 11: PostgreSQL ---
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    networks:
+      - private-network
+
+  # --- Bài 11: Adminer (port 8083) ---
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8083:8080"
+    depends_on:
+      - postgres
+    networks:
+      - private-network
+
+  # --- Bài 13: React + Nginx ---
+  react-app:
+    build: ./react-app
+    ports:
+      - "8086:80"
+    networks:
+      - private-network
+
+# --- Bài 10: Volume lưu trữ dữ liệu ---
+volumes:
+  mysql_data:
+
+# --- Bài 14: Mạng riêng giữa các container ---
+networks:
+  private-network:
+    driver: bridge

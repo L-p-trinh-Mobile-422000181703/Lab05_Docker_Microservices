@@ -1,0 +1,220 @@
+# ============================================================
+# Docker Compose - Part 2: Main Stack
+# Bài 1:  WordPress + MySQL         (port 8080, 3306)
+# Bài 2:  Node.js + MongoDB         (port 3000, 27017)
+# Bài 3:  Nginx Load Balancer + Flask (port 8081)
+# Bài 7:  Elasticsearch + Kibana    (port 9200, 5601)
+# Bài 8:  Django + Celery + Redis   (port 8000)
+# Bài 9:  Nextcloud + MariaDB + Redis (port 8085)
+# Bài 10: Traefik Reverse Proxy     (port 80, 8082)
+# ============================================================
+
+services:
+
+  # ==================== Bài 1: WordPress + MySQL ====================
+  wordpress:
+    image: wordpress:latest
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: mysql-wp:3306
+      WORDPRESS_DB_USER: wpuser
+      WORDPRESS_DB_PASSWORD: wppassword
+      WORDPRESS_DB_NAME: wordpress
+    depends_on:
+      - mysql-wp
+    networks:
+      - wp-network
+
+  mysql-wp:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wpuser
+      MYSQL_PASSWORD: wppassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_wp_data:/var/lib/mysql
+    networks:
+      - wp-network
+
+  # ==================== Bài 2: Node.js + MongoDB ====================
+  node-api:
+    build: ./node-api
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - node-network
+
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - node-network
+
+  # ==================== Bài 3: Nginx LB + Flask ====================
+  flask1:
+    build: ./flask-app
+    environment:
+      SERVER_ID: "flask-1"
+    networks:
+      - lb-network
+
+  flask2:
+    build: ./flask-app
+    environment:
+      SERVER_ID: "flask-2"
+    networks:
+      - lb-network
+
+  nginx-lb:
+    image: nginx:latest
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx-lb/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - flask1
+      - flask2
+    networks:
+      - lb-network
+
+  # ==================== Bài 7: Elasticsearch + Kibana ====================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - elk-network
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk-network
+
+  # ==================== Bài 8: Django + Celery + Redis ====================
+  django:
+    build: ./django-app
+    ports:
+      - "8000:8000"
+    environment:
+      CELERY_BROKER_URL: redis://redis-django:6379/0
+    depends_on:
+      - redis-django
+    networks:
+      - django-network
+
+  celery-worker:
+    build: ./django-app
+    command: celery -A myproject worker --loglevel=info
+    environment:
+      CELERY_BROKER_URL: redis://redis-django:6379/0
+    depends_on:
+      - redis-django
+    networks:
+      - django-network
+
+  redis-django:
+    image: redis:latest
+    networks:
+      - django-network
+
+  # ==================== Bài 9: Nextcloud + MariaDB + Redis ====================
+  nextcloud:
+    image: nextcloud:latest
+    ports:
+      - "8085:80"
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: ncuser
+      MYSQL_PASSWORD: ncpassword
+      REDIS_HOST: redis-nc
+    depends_on:
+      - mariadb
+      - redis-nc
+    volumes:
+      - nextcloud_data:/var/www/html
+    networks:
+      - nc-network
+
+  mariadb:
+    image: mariadb:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: ncuser
+      MYSQL_PASSWORD: ncpassword
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - nc-network
+
+  redis-nc:
+    image: redis:latest
+    networks:
+      - nc-network
+
+  # ==================== Bài 10: Traefik Reverse Proxy ====================
+  traefik:
+    image: traefik:v3.0
+    ports:
+      - "80:80"
+      - "8082:8080"        # Traefik dashboard
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik-network
+
+  whoami:
+    image: traefik/whoami
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`whoami.localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+    networks:
+      - traefik-network
+
+# ==================== Volumes ====================
+volumes:
+  mysql_wp_data:       # Bài 1
+  mongo_data:          # Bài 2
+  es_data:             # Bài 7
+  nextcloud_data:      # Bài 9
+  mariadb_data:        # Bài 9
+
+# ==================== Networks ====================
+networks:
+  wp-network:          # Bài 1
+  node-network:        # Bài 2
+  lb-network:          # Bài 3
+  elk-network:         # Bài 7
+  django-network:      # Bài 8
+  nc-network:          # Bài 9
+  traefik-network:     # Bài 10

@@ -1,0 +1,25 @@
+# ============================================================
+# Docker Compose - Part 2: Bài 6 (Development Mode)
+# Code mount từ host, hot-reload, chạy tests tự động
+# Chạy: docker compose -f docker-compose.dev.yml up
+# ============================================================
+
+services:
+
+  app:
+    build: ./ci-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./ci-app:/app        # Mount code từ host -> hot reload
+    environment:
+      FLASK_DEBUG: "1"
+    command: python app.py
+
+  tests:
+    build: ./ci-app
+    volumes:
+      - ./ci-app:/app        # Cùng mount code để test khi thay đổi
+    command: python -m pytest test_app.py -v --tb=short
+    depends_on:
+      - app

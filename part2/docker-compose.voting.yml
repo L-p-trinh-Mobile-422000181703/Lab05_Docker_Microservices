@@ -1,0 +1,100 @@
+# ============================================================
+# Docker Compose - Part 2: Bài 4 & 5
+# Bài 4:  Prometheus + Grafana + cAdvisor  (port 9090, 3001, 8083)
+# Bài 5:  Multi-tier Voting App            (port 5000, 5001)
+# ============================================================
+
+services:
+
+  # ==================== Bài 4: Prometheus + Grafana ====================
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    ports:
+      - "8083:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring
+
+  # ==================== Bài 5: Voting App ====================
+  vote:
+    build: ./vote
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+    networks:
+      - voting-front
+      - voting-back
+
+  result:
+    build: ./result
+    ports:
+      - "5001:5001"
+    depends_on:
+      - postgres
+    networks:
+      - voting-back
+
+  worker:
+    build: ./worker
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - voting-back
+
+  redis:
+    image: redis:latest
+    networks:
+      - voting-back
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: votes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - voting-back
+
+# ==================== Volumes ====================
+volumes:
+  prometheus_data:     # Bài 4
+  grafana_data:        # Bài 4
+  postgres_data:       # Bài 5
+
+# ==================== Networks ====================
+networks:
+  monitoring:          # Bài 4
+  voting-front:        # Bài 5
+  voting-back:         # Bài 5

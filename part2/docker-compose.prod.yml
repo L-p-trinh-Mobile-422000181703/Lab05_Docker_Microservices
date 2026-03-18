@@ -1,0 +1,21 @@
+# ============================================================
+# Docker Compose - Part 2: Bài 6 (Production Mode)
+# Build image sẵn, serve qua Nginx reverse proxy
+# Chạy: docker compose -f docker-compose.prod.yml up --build
+# ============================================================
+
+services:
+
+  app:
+    build: ./ci-app
+    expose:
+      - "5000"
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./ci-app/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app

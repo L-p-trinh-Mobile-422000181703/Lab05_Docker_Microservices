@@ -1,0 +1,18 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: login-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/food_delivery_auth}
+
+# Feign client - URL to Register Service
+register-service:
+  url: ${REGISTER_SERVICE_URL:http://localhost:8081}
+
+# JWT Configuration
+jwt:
+  secret: MySecretKeyForJWTTokenGenerationMustBeAtLeast256Bits!
+  expiration: 86400000  # 24 hours in milliseconds
